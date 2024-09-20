@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import EmailStr
+from pydantic import EmailStr, BaseModel
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -112,3 +112,19 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=40)
+
+
+class DetectedBook(BaseModel):
+    title: str
+    bounding_box: list
+
+
+# Define the model for each spine region
+class SpineRegion(BaseModel):
+    bounding_box: list[int]  # Bounding box in the format [x_min, y_min, x_max, y_max]
+    confidence: float  # Confidence score for the detected spine
+
+
+# Define the response model containing all spine regions
+class SpineRegionsResponse(BaseModel):
+    spine_regions: list[SpineRegion]  # A list of detected spine regions
