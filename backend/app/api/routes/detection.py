@@ -40,8 +40,8 @@ async def extract_book_title(file: UploadFile = File(...), bounding_box: str = F
     """
     bounding_box_list = json.loads(bounding_box)
 
-    title = await extract_book_details_from_img(file, bounding_box_list)
-    return {"title": title}
+    titles = await extract_book_details_from_img(file, bounding_box_list)
+    return {"titles": titles}
 
 
 @router.post('/books')
