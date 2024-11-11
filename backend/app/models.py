@@ -2,6 +2,7 @@ import uuid
 
 from pydantic import EmailStr, BaseModel
 from sqlmodel import Field, Relationship, SQLModel
+from enum import Enum
 
 
 # Shared properties
@@ -128,3 +129,14 @@ class SpineRegion(BaseModel):
 # Define the response model containing all spine regions
 class SpineRegionsResponse(BaseModel):
     spine_regions: list[SpineRegion]  # A list of detected spine regions
+
+
+class ReportType(str, Enum):
+    genre_distinction = "genre_distinction"
+    number_distinction = "number_distinction"
+    all = "all"
+
+
+class ExecutionType(str, Enum):
+    text = "text"
+    dense_text = "dense_text"

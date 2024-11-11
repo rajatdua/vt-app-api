@@ -6,14 +6,15 @@ from PIL import Image
 from langdetect import detect_langs
 import spacy
 import re
-from collections import Counter
 
 
 def get_ocr_text(img):
     try:
         text = pytesseract.image_to_string(img, lang='eng', config='--psm 6')
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
+        print(text)
+    except pytesseract.TesseractError as e:
+        print(f"Tesseract error: {e}")
+        return ""
     return text
 
 
@@ -93,31 +94,26 @@ def preprocess_img(img, bounding_box):
     x_min, y_min, x_max, y_max = bounding_box
     cropped_spine = img[y_min:y_max, x_min:x_max]
 
-    gray = cv2.cvtColor(cropped_spine, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (1, 1), 0)  # Use smaller kernel size or skip
+    # gray = cv2.cvtColor(cropped_spine, cv2.COLOR_BGR2GRAY)
     # blur = cv2.GaussianBlur(gray, (3, 3), 0)
-    # thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                   cv2.THRESH_BINARY_INV, 11, 2)
-
-    # Morph open to remove noise and invert image
-    # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))  # Smaller kernel size
-    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
-
-    # Morphological closing to connect gaps
-    closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel, iterations=1)
-
-    # Remove small dots (noise)
-    contours, _ = cv2.findContours(closing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    min_area = 10  # Adjust as necessary to remove small dots
-    for contour in contours:
-        if cv2.contourArea(contour) < min_area:
-            cv2.drawContours(closing, [contour], -1, (0, 0, 0), -1)  # Remove small dots
-
-    # invert = 255 - opening
-    invert = 255 - closing
-    return invert
+    # thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    #                                cv2.THRESH_BINARY_INV, 11, 2)
+    #
+    # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    # opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
+    #
+    # closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel, iterations=1)
+    #
+    # contours, _ = cv2.findContours(closing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # min_area = 5
+    # for contour in contours:
+    #     if cv2.contourArea(contour) < min_area:
+    #         cv2.drawContours(closing, [contour], -1, (0, 0, 0), -1)
+    #
+    # invert = 255 - closing
+    # median_filtered = cv2.medianBlur(invert, 3)
+    # denoised = cv2.fastNlMeansDenoising(median_filtered, h=30, templateWindowSize=7, searchWindowSize=21)
+    return cropped_spine
 
 
 def clean_text(text):
@@ -160,45 +156,38 @@ def extract_book_titles_nlp(ocr_text):
 
         for chunk in chunks:
             clean_chunk = clean_text(chunk.text)
-            if is_likely_title(clean_chunk):
-                potential_titles.append(clean_chunk)
+            potential_titles.append(clean_chunk)
+            # if is_likely_title(clean_chunk):
+            #     potential_titles.append(clean_chunk)
 
     return list(set(potential_titles))
 
 
-async def extract_book_details_from_img(file: UploadFile = File(...), bounding_box: list = Body(...)):
+async def extract_book_details_from_img(
+        file: UploadFile = File(...),
+        bounding_box: list = Body(...),
+        img_to_read=None,
+        idx=None
+):
     pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
     if len(bounding_box) != 4:
         raise HTTPException(status_code=400,
                             detail="Invalid bounding box format. Expected [x_min, y_min, x_max, y_max]")
 
-    # Read the image file
-    img = await read_file(file)
+    img = img_to_read if img_to_read is not None else await read_file(file)
+    curr_input = ','.join(map(str, bounding_box))
 
-    inverted_img = preprocess_img(img, bounding_box)
+    try:
+        inverted_img = preprocess_img(img, bounding_box)
+    except Exception as e:
+        raise HTTPException(status_code=400,
+                            detail={e, curr_input})
 
     most_likely_angle_rotated_img = rotate_image(inverted_img, 90)
-    rotation = find_correct_orientation(inverted_img)
-    rotated = rotate_image(inverted_img, rotation)
+    # cv2.imwrite(str(idx) + '. ' + curr_input + '.jpg', most_likely_angle_rotated_img)
 
     most_likely_angle_text = get_ocr_text(most_likely_angle_rotated_img)
-    tesseract_angle_text = get_ocr_text(rotated)
-
     book_titles = extract_book_titles_nlp(most_likely_angle_text)
     title = ' '.join(book_titles)
 
-    book_titles2 = extract_book_titles_nlp(tesseract_angle_text)
-    title2 = ' '.join(book_titles2)
-
-    titles = [title for title in [title, title2] if title.strip()]
-
-    if not titles:
-        return []
-
-    if len(titles) == 1:
-        return titles
-
-    if len(titles) == 2 and titles[0] == titles[1]:
-        return [titles[0]]
-
-    return titles
+    return title
