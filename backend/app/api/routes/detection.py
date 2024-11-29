@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, File, UploadFile, Body, Form
 from app.models import SpineRegionsResponse, ExecutionType
-from app.core.detect import extract_book_details_from_img, get_spine_regions, read_file
+from app.core.detect import extract_book_details_from_img, extract_book_details_from_img_surya, get_spine_regions, read_file
 import torch
 from app.api.helpers.main import get_best_model_path
 import json
@@ -55,7 +55,7 @@ async def extract_book_title(file: UploadFile = File(...), bounding_box: str = F
     return {"titles": titles}
 
 
-@router.post('/books')
+@router.post('/books-v1')
 async def extract_books_titles(file: UploadFile = File(...), bounding_boxes: str = Body(...)):
     """
       Detect multiple books bounding box text and return their titles.
@@ -82,7 +82,7 @@ async def extract_books_titles(file: UploadFile = File(...), bounding_boxes: str
     return {"books": detected_books}
 
 
-@router.post('/books-ext')
+@router.post('/books-v2')
 async def detect_text(file: UploadFile = File(...), execution_type: ExecutionType = ExecutionType.dense_text):
     """Detects text in the file."""
 
@@ -110,3 +110,31 @@ async def detect_text(file: UploadFile = File(...), execution_type: ExecutionTyp
         case ExecutionType.dense_text:
             response = client.document_text_detection(image=image)
     return {"books": result, "executionType": execution_type}
+
+
+@router.post('/books-v3')
+async def extract_books_titles(file: UploadFile = File(...), bounding_boxes: str = Body(...)):
+    """
+      Detect multiple books bounding box text and return their titles.
+      - `bounding_boxes`: List of bounding boxes, each in the format [x_min, y_min, x_max, y_max]
+      """
+    bounding_boxes = json.loads(bounding_boxes)
+
+    # Ensure bounding_boxes is a list and has valid values
+    if not bounding_boxes or not all(len(box) == 4 for box in bounding_boxes):
+        raise HTTPException(status_code=400, detail="Bounding boxes must be a list of [x_min, y_min, x_max, y_max]")
+
+    # Read the image once and pass it to the helper function for each bounding box
+    detected_books = []
+    img = await read_file(file)
+
+    for idx, bounding_box in enumerate(bounding_boxes):
+        # Use the helper function to extract text from each bounding box
+        title = await extract_book_details_from_img_surya(file, bounding_box, img)
+        detected_books.append({
+            "bounding_box": bounding_box,
+            "title": title
+        })
+
+    return {"books": detected_books}
+

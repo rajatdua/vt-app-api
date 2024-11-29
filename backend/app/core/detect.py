@@ -6,16 +6,32 @@ from PIL import Image
 from langdetect import detect_langs
 import spacy
 import re
+from surya.ocr import run_ocr
+from surya.model.detection.model import load_model as load_det_model, load_processor as load_det_processor
+from surya.model.recognition.model import load_model as load_rec_model
+from surya.model.recognition.processor import load_processor as load_rec_processor
+
+langs = ["en"]
+det_processor, det_model = load_det_processor(), load_det_model()
+rec_model, rec_processor = load_rec_model(), load_rec_processor()
 
 
 def get_ocr_text(img):
     try:
         text = pytesseract.image_to_string(img, lang='eng', config='--psm 6')
-        print(text)
     except pytesseract.TesseractError as e:
         print(f"Tesseract error: {e}")
         return ""
     return text
+
+
+def get_ocr_text_surya(img):
+    try:
+        predictions = run_ocr([img], [langs], det_model, det_processor, rec_model, rec_processor)
+    except Exception as e:
+        print(f"Surya error: {e}")
+        return ""
+    return predictions
 
 
 def ocr_score(image):
@@ -189,5 +205,32 @@ async def extract_book_details_from_img(
     most_likely_angle_text = get_ocr_text(most_likely_angle_rotated_img)
     book_titles = extract_book_titles_nlp(most_likely_angle_text)
     title = ' '.join(book_titles)
+
+    return title
+
+
+async def extract_book_details_from_img_surya(
+        file: UploadFile = File(...),
+        bounding_box: list = Body(...),
+        img_to_read=None,
+):
+    if len(bounding_box) != 4:
+        raise HTTPException(status_code=400,
+                            detail="Invalid bounding box format. Expected [x_min, y_min, x_max, y_max]")
+
+    img = img_to_read if img_to_read is not None else await read_file(file)
+    curr_input = ','.join(map(str, bounding_box))
+
+    try:
+        inverted_img = preprocess_img(img, bounding_box)
+    except Exception as e:
+        raise HTTPException(status_code=400,
+                            detail={e, curr_input})
+
+    most_likely_angle_rotated_img = rotate_image(inverted_img, 90)
+
+    most_likely_angle_text = get_ocr_text_surya(img)
+    print(most_likely_angle_text)
+    title = ' '.join(most_likely_angle_text)
 
     return title

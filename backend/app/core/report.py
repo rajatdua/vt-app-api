@@ -1,5 +1,7 @@
 from typing import List, Dict, Tuple
 from dataclasses import dataclass
+import re
+from collections import Counter
 
 
 @dataclass
@@ -128,9 +130,80 @@ def combine_book_titles_with_min_distance(
     return groups
 
 
-def generate_report_by_genre(grouped_result):
+def generate_report_by_genre(titles_from_groups, category_count):
     return None
 
 
-def generate_report_by_number(grouped_result):
-    return None
+def extract_number_prefix(title):
+    # Use regex to find the leading number in the title
+    match = re.match(r"^(\d+)", title)
+    return match.group(1) if match else None
+
+
+def generate_report_by_number(combined_title_data_passed, category_count):
+    """
+    Classifies items into inliers and outliers based on the top-k dominant number prefixes.
+
+    Args:
+        combined_title_data_passed (list of dict): List of items containing 'current_calculated_title'.
+        category_count (int): Number of top dominant numbers to consider for inliers.
+
+    Returns:
+        list: A list containing [outliers, inliers_groups, dominant_numbers].
+              - outliers: Items not in any of the top-k dominant groups.
+              - inliers_groups: A dictionary mapping each dominant number to its group of inliers.
+              - dominant_numbers: List of the top-k dominant numbers.
+    """
+    # Step 1: Count frequency of number prefixes
+    number_counts = Counter()
+    for item in combined_title_data_passed:
+        prefix = extract_number_prefix(item['current_calculated_title'])
+        if prefix:
+            number_counts[prefix] += 1
+
+    # Step 2: Get the top-k dominant numbers
+    dominant_numbers = [num for num, _ in number_counts.most_common(category_count)]
+
+    # Step 3: Separate inliers and outliers based on the top-k dominant numbers
+    inliers_groups = {num: [] for num in dominant_numbers}
+    outliers = []
+
+    for item in combined_title_data_passed:
+        prefix = extract_number_prefix(item['current_calculated_title'])
+        if prefix in dominant_numbers:
+            inliers_groups[prefix].append(item)
+        else:
+            outliers.append(item)
+
+    return [outliers, inliers_groups, dominant_numbers]
+
+
+def get_titles_from_groups(grouped_result: List[List[Dict]]):
+    result = [{} for _ in range(len(grouped_result))]  # Initialize each element as an empty dictionary
+    for i, group in enumerate(grouped_result):
+        result[i]['group_number'] = i + 1
+        current_calculated_title = []
+        current_title_metadata = {}
+        current_title_raw = {}
+        for j, item in enumerate(group):
+            box = get_bounding_box(item['vertices'])
+            current_title_metadata[j] = {'box': box}  # Initialize as a dictionary with 'box' key
+            current_title_raw[j] = item
+            current_calculated_title.append(item['description'])
+        result[i]['current_calculated_title'] = " ".join(current_calculated_title)
+        result[i]['current_title_metadata'] = current_title_metadata
+        result[i]['current_title_raw'] = current_title_raw
+    return result
+
+
+def create_number_report_payload(data, outliers, inliers, dominant_number, category_count):
+    return {
+        'total_books': len(data),
+        'outliers_count': len(outliers),
+        'inliers_count': len(inliers),
+        'dominant_number': dominant_number,
+        'category_count': category_count,
+        'outliers': outliers,
+        'inliers': inliers,
+        'misplacement_rate': len(outliers) / len(data) if data else 0
+    }
