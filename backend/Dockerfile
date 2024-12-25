@@ -36,3 +36,7 @@ COPY ./prestart.sh /app/
 COPY ./tests-start.sh /app/
 
 COPY ./app /app/app
+
+# Gunicorn and Uvicorn size limit configurations
+ENV GUNICORN_CMD_ARGS="--timeout 120 --worker-class uvicorn.workers.UvicornWorker --limit-request-line 8190 --limit-request-field_size 8190 --limit-request-body 10485760"
+ENV MAX_REQUEST_SIZE=10485760

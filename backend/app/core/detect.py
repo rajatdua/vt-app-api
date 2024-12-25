@@ -27,9 +27,16 @@ def get_ocr_text(img):
 
 def get_ocr_text_surya(img):
     try:
-        predictions = run_ocr([img], [langs], det_model, det_processor, rec_model, rec_processor)
+        rotated_img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(rotated_img_rgb)
+        resized = resize_image(pil_image)
+        try:
+            predictions = run_ocr([resized], [langs], det_model, det_processor, rec_model, rec_processor)
+        except Exception as e:
+            print(f"Surya error: {e}")
+            return ""
     except Exception as e:
-        print(f"Surya error: {e}")
+        print(f"CV2 PIL error: {e}")
         return ""
     return predictions
 
@@ -51,6 +58,10 @@ def ocr_score(image):
 
 def rotate_image(image, angle):
     return np.rot90(image, k=angle // 90)
+
+
+def resize_image(pil_img: Image, max_width=1200, max_height=800):
+    return pil_img.resize((max_width, max_height))
 
 
 def find_correct_orientation_custom(image):
@@ -229,8 +240,13 @@ async def extract_book_details_from_img_surya(
 
     most_likely_angle_rotated_img = rotate_image(inverted_img, 90)
 
-    most_likely_angle_text = get_ocr_text_surya(img)
-    print(most_likely_angle_text)
-    title = ' '.join(most_likely_angle_text)
+    predictions_txt = get_ocr_text_surya(most_likely_angle_rotated_img)
+
+    titles = []
+    for ocr_result in predictions_txt:
+        for text_line in ocr_result.text_lines:
+            titles.append(text_line.text)
+
+    title = ' '.join(titles)
 
     return title
