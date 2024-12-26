@@ -1,48 +1,42 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 
 from app.core.report import (combine_book_titles_with_min_distance, get_titles_from_groups,
                              generate_report_by_genre, generate_report_by_number, create_number_report_payload)
-from app.models import ReportType
+from app.models import ReportType, GenerateReportRequest
 
 router = APIRouter()
 
 
 @router.post('/generate-by-type-for-single')
-def generate_report(
-        report_type: ReportType,
-        raw_detected_text_data,
-        category_count: int,
-        horizontal_epsilon=None,
-        vertical_spacing_factor=None
-):
+def generate_report(request: GenerateReportRequest = Body(...)):
     grouped_result = combine_book_titles_with_min_distance(
-        raw_detected_text_data,
-        horizontal_epsilon,
-        vertical_spacing_factor
+        request.raw_detected_text_data,
+        request.horizontal_epsilon,
+        request.vertical_spacing_factor
     )
     titles_from_groups = get_titles_from_groups(grouped_result)
-    match report_type:
-        case ReportType.genre_distinction:
-            return {'genre': generate_report_by_genre(titles_from_groups, category_count)}
-        case ReportType.number_distinction:
-            [outliers, inliers, dominant_number] = generate_report_by_number(titles_from_groups, category_count)
+    match request.report_type:
+        case "genre_distinction":
+            return {'genre': generate_report_by_genre(titles_from_groups, request.category_count)}
+        case "number_distinction":
+            [outliers, inliers, dominant_number] = generate_report_by_number(titles_from_groups, request.category_count)
             number_report = create_number_report_payload(
                 titles_from_groups,
                 outliers,
                 inliers,
                 dominant_number,
-                category_count
+                request.category_count
             )
             return {'number': number_report}
-        case ReportType.all:
-            genre_report = generate_report_by_genre(titles_from_groups, category_count)
-            [outliers, inliers, dominant_number] = generate_report_by_number(titles_from_groups, category_count)
+        case "all":
+            genre_report = generate_report_by_genre(titles_from_groups, request.category_count)
+            [outliers, inliers, dominant_number] = generate_report_by_number(titles_from_groups, request.category_count)
             number_report = create_number_report_payload(
                 titles_from_groups,
                 outliers,
                 inliers,
                 dominant_number,
-                category_count
+                request.category_count
             )
             return {'genre': genre_report, 'number': number_report}
         case _:

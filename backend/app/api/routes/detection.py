@@ -88,7 +88,7 @@ async def extract_books_titles(file: UploadFile = File(...), bounding_boxes: str
 
 
 @router.post('/books-v2')
-async def detect_text(file: UploadFile = File(...), execution_type: ExecutionType = ExecutionType.dense_text):
+async def detect_text(file: UploadFile = File(...), execution_type: ExecutionType = ExecutionType.text):
     """Detects text in the file."""
 
     content = await file.read()

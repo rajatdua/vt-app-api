@@ -140,3 +140,11 @@ class ReportType(str, Enum):
 class ExecutionType(str, Enum):
     text = "text"
     dense_text = "dense_text"
+
+
+class GenerateReportRequest(BaseModel):
+    report_type: str
+    raw_detected_text_data: list
+    category_count: int
+    horizontal_epsilon: float | None = None
+    vertical_spacing_factor: float | None = None

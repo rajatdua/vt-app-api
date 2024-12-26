@@ -185,22 +185,34 @@ def get_titles_from_groups(grouped_result: List[List[Dict]]):
         current_calculated_title = []
         current_title_metadata = {}
         current_title_raw = {}
+        # Initialize combined bounding box coordinates
+        min_x, min_y = float('inf'), float('inf')
+        max_x, max_y = float('-inf'), float('-inf')
         for j, item in enumerate(group):
             box = get_bounding_box(item['vertices'])
             current_title_metadata[j] = {'box': box}  # Initialize as a dictionary with 'box' key
             current_title_raw[j] = item
             current_calculated_title.append(item['description'])
+
+            # Update combined bounding box coordinates
+            min_x = min(min_x, box.min_x)
+            max_x = max(max_x, box.max_x)
+            min_y = min(min_y, box.min_y)
+            max_y = max(max_y, box.max_y)
+
         result[i]['current_calculated_title'] = " ".join(current_calculated_title)
         result[i]['current_title_metadata'] = current_title_metadata
         result[i]['current_title_raw'] = current_title_raw
+        result[i]['bounding_box'] = [min_x, min_y, max_x, max_y]
     return result
 
 
 def create_number_report_payload(data, outliers, inliers, dominant_number, category_count):
+    total_inliers_count = sum(len(group) for group in inliers.values())
     return {
         'total_books': len(data),
         'outliers_count': len(outliers),
-        'inliers_count': len(inliers),
+        'inliers_count': total_inliers_count,
         'dominant_number': dominant_number,
         'category_count': category_count,
         'outliers': outliers,
