@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, File, UploadFile, Body, Form
-from app.models import SpineRegionsResponse, ExecutionType
+from app.models import SpineRegionsResponse, ExecutionType, Base64ImageRequest
 from fastapi.responses import StreamingResponse
 import asyncio
 from app.core.detect import extract_book_details_from_img, get_spine_regions, read_file, \
@@ -9,6 +9,9 @@ from app.api.helpers.main import get_best_model_path
 import json
 from google.cloud import vision
 import base64
+from PIL import Image
+import io
+import numpy as np
 
 import os
 
@@ -27,17 +30,31 @@ model = torch.hub.load('ultralytics/yolov5', 'custom', path=weight_path)
 
 
 @router.post('/bb', response_model=SpineRegionsResponse)
-async def detect_book_spines(file: UploadFile = File(...)):
-    if not file:
-        raise HTTPException(status_code=400, detail="File not received")
+async def detect_book_spines(data: Base64ImageRequest):
+    try:
+        # Decode base64 image
+        img_bytes = base64.b64decode(data.image_base64)
+        # Open the image using Pillow
+        img = Image.open(io.BytesIO(img_bytes))
+        # Convert to a NumPy array (RGB)
+        img_np = np.array(img.convert("RGB"))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image: {e}")
+    # try:
+    #     # Decode base64 image
+    #     img_bytes = base64.b64decode(data.image_base64)
+    # except (UnicodeEncodeError, ValueError):
+    #     raise HTTPException(status_code=400, detail="Invalid base64 image")
+    # if not file:
+    #     raise HTTPException(status_code=400, detail="File not received")
     """
        Detect book spines and return bounding box coordinates.
     """
     # Read the image file
-    img = await read_file(file)
+    # img = await read_file(file)
 
     # Detect book spines using YOLOv5
-    results = model(img)
+    results = model(img_np)
 
     # Get bounding boxes for detected objects (book spines)
     spine_regions = get_spine_regions(results)
@@ -88,11 +105,20 @@ async def extract_books_titles(file: UploadFile = File(...), bounding_boxes: str
 
 
 @router.post('/books-v2')
-async def detect_text(file: UploadFile = File(...), execution_type: ExecutionType = ExecutionType.text):
+# async def detect_text(file: UploadFile = File(...), execution_type: ExecutionType = ExecutionType.text):
+async def detect_text(data: Base64ImageRequest, execution_type: ExecutionType = ExecutionType.text):
     """Detects text in the file."""
 
-    content = await file.read()
-    encoded_content = base64.b64encode(content).decode("utf-8")
+    try:
+        # Decode base64 image
+        img_bytes = base64.b64decode(data.image_base64)
+    except (base64.binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid base64 image")
+
+        # Encode the image content for Vision API
+    encoded_content = base64.b64encode(img_bytes).decode("utf-8")
+    # content = await file.read()
+    # encoded_content = base64.b64encode(content).decode("utf-8")
 
     result = []
     image = vision.Image(content=encoded_content)

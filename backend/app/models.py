@@ -148,3 +148,7 @@ class GenerateReportRequest(BaseModel):
     category_count: int
     horizontal_epsilon: float | None = None
     vertical_spacing_factor: float | None = None
+
+
+class Base64ImageRequest(BaseModel):
+    image_base64: str
